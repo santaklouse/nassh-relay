@@ -7,7 +7,8 @@
   "license": "AGPL-3.0",
   "dependencies": {
     "node-uuid": "1.4.0",
-    "websocket": "1.0.8"
+    "proxysocket": "^1.2.0",
+    "websocket": "^1.0.28"
   },
   "main": "nassh-relay.js",
   "engines": {
