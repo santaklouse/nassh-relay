@@ -99,10 +99,30 @@
  * License: AGPL-v3
  */
 
+const SocksClient = require('socks').SocksClient;
+let options = {
+    //SOCKS5 Proxy address (local Tor in our case)
+    proxy: {
+        host: 'localhost', // ipv4, ipv6, or hostname
+        port: 9050,
+        type: 5
+    },
+
+    command: 'connect',
+
+    destination: {
+        host: '',
+        port: 22
+    }
+};
+
+//TODO: rewrite/refactor all this file!
+
+const _= require('lodash');
+const net = require("net");
 var http = require("http"),
     util = require("util"),
     url = require("url"),
-    net = require("net"),
     uuid = require("node-uuid"),
     WebSocketServer = require("websocket").server;
 
@@ -111,7 +131,7 @@ const proxysocket = require('proxysocket');
 var sessions = {}
 
 var log = function (str) {
-    console.log((new Date()) + " " + str);
+    console.log(`[${(new Date()).toLocaleString()}] ${str}`);
 }
 
 if (process.argv.length < 3 || process.argv.length > 4) {
@@ -132,55 +152,35 @@ if (process.argv.length == 4) {
 // corner case, here and don't have to do special case checking at the
 // caller.
 Buffer.prototype.bslice = function (index) {
+    if (!index)
+        return new Buffer(0);
     if (index > this.length || index < 0)
         throw new Error("Trying to splice an array at index " + (this.length - index));
-    if (index == 0)
-        return new Buffer(0);
 
     return this.slice(-index);
 }
 
 var friendlyBufferRelease = 256 * 256 * 16; // 1MB
 
+const isPrivateIP = (ip) => {
+    var parts = ip.split('.');
+    return parts[0] === '10' ||
+        (parts[0] === '172' && (parseInt(parts[1], 10) >= 16 && parseInt(parts[1], 10) <= 31)) ||
+        (parts[0] === '192' && parts[1] === '168');
+}
+
 var Session = function (host, port, callbackFail, callbackSuccess) {
 
     var ses = this;
 
+    this.BYTES_WRITTEN_CORRECTION = 0;
+    this.BYTES_READ_CORRECTION = 0;
+
     ses.sid = uuid.v4();
     ses.host = host;
-    ses.port = port;
+    ses.port = +port;
 
-    // Socket to backend
-    // ses.backendSocket = net.Socket();
-    ses.backendSocket = proxysocket.create('localhost', 9150);
-
-    ses.backendSocket.on("data", function (buf) {
-        console.log('data')
-        // Send to frontend
-        ses.sendFragment(buf);
-        // .. and add to retransmission buffer
-        ses.B2FUnacked = Buffer.concat([ses.B2FUnacked, buf]);
-    });
-
-    ses.backendSocket.on("socksdata", function (buf) {
-        console.log('socksdata', arguments)
-    });
-
-    ses.backendSocket.on("error", callbackFail);
-    ses.backendSocket.on("connect", function () {
-        console.log('connect')
-        ses.backendSocket.removeListener("error", callbackFail)
-        callbackSuccess();
-    });
-    ses.backendSocket.on("close", function (has_error) {
-        console.log('close')
-        // this is called also for errors.
-        sessions[ses.sid] = null;
-        if (ses.frontendCon) {
-            ses.frontendCon.closeProtocol();
-        }
-    });
-    ses.backendSocket.connect(ses.port, ses.host);
+    this.log(`New session to ${host}:${port}`);
 
     // Retransmission buffer
     ses.B2FUnacked = new Buffer(0);
@@ -188,61 +188,129 @@ var Session = function (host, port, callbackFail, callbackSuccess) {
     // Current websocket connection to frontend.
     // Can be null, when no frontend is connected.
     ses.frontendCon = null;
+
+    options.destination.host = ses.host;
+    options.destination.port = ses.port;
+
+
+    this.attachEvents = () => {
+        ses.backendSocket.on("data",  (buf) => {
+            // Send to frontend
+            ses.sendFragment(buf);
+            // .. and add to retransmission buffer
+            ses.B2FUnacked = Buffer.concat([ses.B2FUnacked, buf]);
+        });
+
+        ses.backendSocket.on("socksdata", function (buf) {
+            console.log('socksdata', arguments)
+        });
+
+        ses.backendSocket.on("error", callbackFail);
+        ses.backendSocket.on("connect", function () {
+            ses.backendSocket.removeListener("error", callbackFail)
+            callbackSuccess();
+        });
+        ses.backendSocket.on("close", function (has_error) {
+            // this is called also for errors.
+            sessions[ses.sid] = null;
+            if (ses.frontendCon) {
+                ses.frontendCon.closeProtocol();
+            }
+        });
+    }
+
+
+    if ((net.isIPv4(ses.host) && isPrivateIP(ses.host)) || ses.host === 'localhost') {
+        //TODO: in this case we will use direct connection
+        console.warn('this is private address: ', ses.host)
+        ses.backendSocket = net.Socket();
+        this.attachEvents();
+        ses.backendSocket.connect(ses.port, ses.host);
+        return;
+    }
+
+    SocksClient.createConnection(options).then(result => {
+        ses.backendSocket = result.socket;
+
+        ses.BYTES_WRITTEN_CORRECTION = +ses.backendSocket.bytesWritten;
+        ses.BYTES_READ_CORRECTION = +ses.backendSocket.bytesRead;
+
+        this.attachEvents();
+
+        ses.backendSocket.removeListener("error", callbackFail)
+        ses.backendSocket.emit('connect')
+    }).catch(callbackFail)
+
+}
+
+Session.prototype.close = function () {
+    this.log('session was closed.')
+    this.backendSocket.emit('close')
 }
 
 Session.prototype.log = function (str) {
-    log("[" + this.sid + "] " + str)
+    log("[" + this.sid + "]" + str)
+}
+
+Session.prototype.frontendLog = function (str) {
+    log("[" + this.sid + "][frontend] " + str)
 }
 
 // Sends a fragment to the current connection
 Session.prototype.sendFragment = function (fragment) {
+    let bytesWritten = this.backendSocket.bytesWritten - this.BYTES_WRITTEN_CORRECTION;
     if (this.frontendCon) {
         var headerBuffer = new Buffer(4);
         headerBuffer.writeInt32BE(
             // We have to take the minimum here, as we don't want
             // to irritate the frontend by sending an ack pointer
             // that's ahead of its bytestream.
-            Math.min(this.backendSocket.bytesWritten,
-                this.frontendCon.pos),
-            0);
+            Math.min(bytesWritten, this.frontendCon.pos), 0
+        );
         this.frontendCon.sendBytes(Buffer.concat([headerBuffer, fragment]));
     }
 }
 
 // Process an ack from the frontend. Returns false on failures.
 Session.prototype.shrinkBuffer = function (ack) {
-    if (ack > this.backendSocket.bytesRead) {
+    let bytesRead = this.backendSocket.bytesRead - this.BYTES_READ_CORRECTION;
+
+    if (ack > bytesRead) {
         // If ack bigger than what we have sent, then we are not
         // sure what has happen.
         this.log("Buffer shrink failed: Ack number ahead.")
         return false;
     }
-    if (ack < (this.backendSocket.bytesRead - this.B2FUnacked.length)) {
+    if (ack < (bytesRead - this.B2FUnacked.length)) {
         // If ack is smaller than what we have in the buffer, then the
         // frontend is rerequesting a bytestream segment it already
         // has acked.
+
         this.log("Buffer shrink failed: Ack number behind our buffer.")
         return false;
     }
-    this.B2FUnacked = this.B2FUnacked.bslice(this.backendSocket.bytesRead - ack);
+
+    this.B2FUnacked = this.B2FUnacked.bslice(bytesRead - ack);
     return true;
 }
 
+
 // Adopts the given frontend connection as current websocket connection.
 Session.prototype.adopt = function (frontendCon, ack, pos) {
-    var ses = this
-
+    let bytesWritten = this.backendSocket.bytesWritten - this.BYTES_WRITTEN_CORRECTION;
     // Do we have another frontend connection? Close it.
-    if (ses.frontendCon) {
-        ses.frontendCon.closeProtocol();
+    if (this.frontendCon) {
+        this.frontendCon.closeProtocol();
     }
-    frontendCon.on("close", function (reasonCode, description) {
-        if (ses.frontendCon == frontendCon) {
-            ses.frontendCon = null;
+    frontendCon.on("close", (reasonCode, description) => {
+        if (this.frontendCon === frontendCon) {
+            this.frontendCon = null;
         }
-        ses.log("Peer " + frontendCon.remoteAddress + " disconnected.");
+        this.log("Peer " + frontendCon.remoteAddress + " disconnected.");
     });
-    frontendCon.on("message", function (message) {
+    frontendCon.on("message", (message) => {
+
+        let bytesWritten = this.backendSocket.bytesWritten - this.BYTES_WRITTEN_CORRECTION;
         // Whenever we see a "message", this must be the currently
         // adopted frontend. If we adopted another frontend
         // connection, we have called close() via closeProtocol() on
@@ -258,14 +326,14 @@ Session.prototype.adopt = function (frontendCon, ack, pos) {
             // Forward unseen data from frontend to backend
             // connection.
             var unseenPayload = message.binaryData.bslice(
-                Math.max(frontendCon.pos - ses.backendSocket.bytesWritten, 0));
-
-            ses.backendSocket.write(unseenPayload);
+                Math.max(frontendCon.pos - bytesWritten, 0)
+            );
+            this.backendSocket.write(unseenPayload);
 
             // We received an updated ack pointer from the frontend.
             // We might be able to shrink our buffers in response.
-            ok = ses.shrinkBuffer(message.binaryData.readInt32BE(0));
-            if (!ok) {
+            // ok = ses.shrinkBuffer(message.binaryData.readInt32BE(0));
+            if (!this.shrinkBuffer(message.binaryData.readInt32BE(0))) {
                 frontendCon.emit("close");
                 return;
             }
@@ -274,17 +342,17 @@ Session.prototype.adopt = function (frontendCon, ack, pos) {
             // haven't replied for a while, the frontend doesn't know
             // that we received that data. Let's be friendly, and from
             // time to time signal our state with an empty block.
-            if (ses.backendSocket.bytesWritten - frontendCon.pos > friendlyBufferRelease) {
-                ses.sendFragment(new Buffer(0));
+            if (bytesWritten - frontendCon.pos > friendlyBufferRelease) {
+                this.sendFragment(new Buffer(0));
             }
         }
     });
 
-    if (pos > ses.backendSocket.bytesWritten) {
+    if (pos > bytesWritten) {
         // If this is bigger than what we have seen, we have a gap in
         // receiving data. Close the connection. It's unrecoverable.
-        ses.log("Pos number error.")
-        frontend.closeProtocol();
+        this.log("Pos number error.")
+        frontendCon.closeProtocol();
         return;
     }
 
@@ -294,18 +362,18 @@ Session.prototype.adopt = function (frontendCon, ack, pos) {
     // should be the last offset the frontend got an ack for.
     frontendCon.pos = pos
 
-    ok = ses.shrinkBuffer(ack)
-    if (!ok) {
+    // ok = ses.shrinkBuffer(ack)
+    if (!this.shrinkBuffer(ack)) {
         frontendCon.closeProtocol();
         return;
     }
 
-    ses.frontendCon = frontendCon;
+    this.frontendCon = frontendCon;
 
-    ses.log("Adopted new frontend from from " + frontendCon.remoteAddress)
+    this.log("Adopted new frontend from from " + frontendCon.remoteAddress)
     // We shrunk the buffer before so we know that the
     // B2FUnacked really contains just unacked bytes.
-    ses.sendFragment(ses.B2FUnacked)
+    this.sendFragment(this.B2FUnacked)
 }
 
 
@@ -342,7 +410,6 @@ var httpServer = http.createServer(function (request, response) {
                 request.resourceURL.query.port,
                 // fail callback
                 function () {
-                    console.log('fail cb', arguments)
                     response.writeHead(502, commonHeader);
                     response.end();
                 },
@@ -351,7 +418,8 @@ var httpServer = http.createServer(function (request, response) {
                     ses.log(util.format("Forwarding client from %s to %s:%s",
                         request.connection.remoteAddress,
                         request.resourceURL.query.host,
-                        request.resourceURL.query.port));
+                        request.resourceURL.query.port)
+                    );
                     response.writeHead(200, commonHeader);
                     sessions[ses.sid] = ses;
                     response.end(ses.sid);
@@ -409,9 +477,15 @@ wsServer.on("request", function (request) {
         frontendCon.closeProtocol();
         return;
     }
-    ses.adopt(frontendCon,
+    ses.adopt(
+        frontendCon,
         parseInt(request.resourceURL.query.ack),
-        parseInt(request.resourceURL.query.pos));
+        parseInt(request.resourceURL.query.pos)
+    );
+});
+
+process.on('SIGINT', function(code) {
+    _.each(sessions, ses => ses.close());
 });
 
 log("Relay running on http://localhost:" + port + "/");
