@@ -19,3 +19,12 @@ to specify an external-redirect.
 [*] The session is still protected by SSH, so guessing the session ID
 is a denial of service attack and allows sniffing the encrypted sshd
 response bytestream.
+
+## Demo
+
+[![PlayWithDocker](https://github.com/play-with-docker/stacks/raw/cff22438cb4195ace27f9b15784bbb497047afa7/assets/images/button.png)](http://play-with-docker.com?stack=https://gist.githubusercontent.com/santaklouse/6b1c084bf212a4b00cbd3b838b39495b/raw)
+
+client options (fill in your temp docker url from pwd)
+```
+--proxy-host=pwd10-XXX-XXX-XXX-8022.host1.labs.play-with-docker.com --proxy-port=8022
+```

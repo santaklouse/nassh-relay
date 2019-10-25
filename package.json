@@ -13,6 +13,9 @@
     "websocket": "^1.0.28"
   },
   "main": "nassh-relay.js",
+  "scripts": {
+    "start": "node nassh-relay.js 8022"
+  },
   "engines": {
     "node": ">= 0.7"
   }
