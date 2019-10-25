@@ -1,0 +1,24 @@
+# Env
+.env
+
+# Node
+npm-debug.log
+node_modules/
+package-lock.json
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# WebStorm
+.idea/
+
+# vi
+*~
+
+# General
+log/
+*.log
+npm-debug.log
