@@ -10,4 +10,6 @@ COPY . .
 
 EXPOSE 8022
 
+#COPY .env.example ./.env
+
 CMD [ "node", "nassh-relay.js", "8022" ]

@@ -6,6 +6,7 @@
   },
   "license": "AGPL-3.0",
   "dependencies": {
+    "dotenv": "^8.2.0",
     "lodash": "^4.17.15",
     "node-uuid": "1.4.0",
     "proxysocket": "^1.2.0",

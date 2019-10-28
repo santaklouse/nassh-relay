@@ -99,11 +99,12 @@
  * License: AGPL-v3
  */
 
+const dotenv = require('dotenv');
 const SocksClient = require('socks').SocksClient;
 let options = {
     //SOCKS5 Proxy address (local Tor in our case)
     proxy: {
-        host: 'localhost', // ipv4, ipv6, or hostname
+        host: process.env.TORPROXY_HOST, // ipv4, ipv6, or hostname
         port: 9050,
         type: 5
     },
