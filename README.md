@@ -22,8 +22,14 @@ response bytestream.
 
 ## Demo
 
+1. Click link below
+
 [![PlayWithDocker](https://github.com/play-with-docker/stacks/raw/cff22438cb4195ace27f9b15784bbb497047afa7/assets/images/button.png)](http://play-with-docker.com?stack=https://gist.githubusercontent.com/santaklouse/6b1c084bf212a4b00cbd3b838b39495b/raw/nassh-stack.yml)
 
+2. login to docker and wait for swarm creating 
+3. after sucessful swarm creating need to wait about 2 minutes for torproxy container set up
+4. in the top of Play with Docker site opened by step 2 find link *8022* and copy it
+5. paste link to our nassh proxy host and remote http and slashes
 client options (fill in your temp docker url from pwd)
 ```
 --proxy-host=pwd10-XXX-XXX-XXX-8022.host1.labs.play-with-docker.com --proxy-port=8022
