@@ -3,6 +3,8 @@ nassh-relay
 
 Relay for Native Client SSH, see http://goo.gl/HMsm8p
 
+!!! Locally installed tor required for non Docker version.
+
 Typical use case is when you want to firewall your sshd port. Also the
 relay supports roaming clients better than a direct TCP connection, as
 the TCP stack cuts the connection if the client IP changes. This relay
