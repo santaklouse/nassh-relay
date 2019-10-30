@@ -29,8 +29,10 @@ response bytestream.
 2. login to docker and wait for swarm creating 
 3. after sucessful swarm creating need to wait about 2 minutes for torproxy container set up
 4. in the top of Play with Docker site opened by step 2 find link *8022* and copy it
-5. paste link to our nassh proxy host and remote http and slashes
+5. paste link to nassh proxy host and remove http and slashes (like in example below)
 client options (fill in your temp docker url from pwd)
 ```
 --proxy-host=pwd10-XXX-XXX-XXX-8022.host1.labs.play-with-docker.com --proxy-port=8022
 ```
+6. connect to your .onion or usual .com host or ip.
+7. `# curl ipinfo.io` and look at your ip address =)
