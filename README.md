@@ -1,3 +1,5 @@
+[![Docker Pulls](https://img.shields.io/docker/pulls/santaklouse/nassh-tor-relay)](https://hub.docker.com/r/santaklouse/nassh-tor-relay)
+
 nassh-relay
 ===========
 
