@@ -135,12 +135,12 @@ var log = function (str) {
     console.log(`[${(new Date()).toLocaleString()}] ${str}`);
 }
 
-if (process.argv.length < 3 || process.argv.length > 4) {
-    console.log("Usage: nassh-relay.js <bind-port> [external-redirect]")
-    process.exit(1)
-}
+// if (process.argv.length < 3 || process.argv.length > 4) {
+//     console.log("Usage: nassh-relay.js <bind-port> [external-redirect]")
+//     process.exit(1)
+// }
 
-var port = parseInt(process.argv[2])
+var port = parseInt(process.argv[2] || process.env.PORT || 8022)
 var externalRedirect = null
 if (process.argv.length == 4) {
     externalRedirect = process.argv[3]
@@ -489,4 +489,4 @@ process.on('SIGINT', function(code) {
     _.each(sessions, ses => ses.close());
 });
 
-log("Relay running on http://localhost:" + port + "/");
+log("Relay running on http://0.0.0.0:" + port + "/");

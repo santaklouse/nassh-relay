@@ -1,1 +1,1 @@
-web: node nassh-relay.js 8022
+web: node nassh-relay.js
