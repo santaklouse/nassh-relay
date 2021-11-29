@@ -24,7 +24,18 @@ to specify an external-redirect.
 is a denial of service attack and allows sniffing the encrypted sshd
 response bytestream.
 
-## Demo
+##Demos:
+
+####Deploy to heroku:
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/santaklouse/nassh-relay)
+
+####Live:
+Try it by yourself:
+```
+--proxy-host=nassh-relay.herokuapp.com --use-ssl --proxy-port=443
+```
+
+#### Play with Docker 
 
 1. Click link below
 

@@ -1,0 +1,24 @@
+{
+    "name": "Chrome SSH Extension: Relay for Native Client SSH",
+    "description": "Relay for Native Client SSH (see http://goo.gl/HMsm8p)",
+    "repository": "https://github.com/santaklouse/nassh-relay",
+    "keywords": [
+        "ssh",
+        "proxy",
+        "relay",
+        "tor",
+        "onion",
+        "chrome-extension"
+    ],
+    "buildpacks": [
+        {
+            "url": "https://github.com/iamashks/heroku-buildpack-tor-proxy.git"
+        }
+    ],
+    "env": {
+        "TORPROXY_HOST": {
+            "description": "address of socks (tor) proxy",
+            "value": true
+        }
+    }
+}
