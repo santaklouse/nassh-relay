@@ -212,6 +212,7 @@ var Session = function (host, port, callbackFail, callbackSuccess) {
             callbackSuccess();
         });
         ses.backendSocket.on("close", function (has_error) {
+            console.log('backendSocket close; has_error:', has_error)
             // this is called also for errors.
             sessions[ses.sid] = null;
             if (ses.frontendCon) {
@@ -230,17 +231,19 @@ var Session = function (host, port, callbackFail, callbackSuccess) {
         return;
     }
 
-    SocksClient.createConnection(options).then(result => {
-        ses.backendSocket = result.socket;
+    SocksClient.createConnection(options)
+        .then(result => {
+            ses.backendSocket = result.socket;
 
-        ses.BYTES_WRITTEN_CORRECTION = +ses.backendSocket.bytesWritten;
-        ses.BYTES_READ_CORRECTION = +ses.backendSocket.bytesRead;
+            ses.BYTES_WRITTEN_CORRECTION = +ses.backendSocket.bytesWritten;
+            ses.BYTES_READ_CORRECTION = +ses.backendSocket.bytesRead;
 
-        this.attachEvents();
+            this.attachEvents();
 
-        ses.backendSocket.removeListener("error", callbackFail)
-        ses.backendSocket.emit('connect')
-    }).catch(callbackFail)
+            ses.backendSocket.removeListener("error", callbackFail)
+            ses.backendSocket.emit('connect')
+        })
+        .catch(callbackFail)
 
 }
 
@@ -335,6 +338,7 @@ Session.prototype.adopt = function (frontendCon, ack, pos) {
             // We might be able to shrink our buffers in response.
             // ok = ses.shrinkBuffer(message.binaryData.readInt32BE(0));
             if (!this.shrinkBuffer(message.binaryData.readInt32BE(0))) {
+                this.log('close frontend connection: not shrinkBuffer(message.binaryData)');
                 frontendCon.emit("close");
                 return;
             }
@@ -361,10 +365,11 @@ Session.prototype.adopt = function (frontendCon, ack, pos) {
     // which on the frontend is going to send data fragments. In a
     // fresh connection this should be 0. In a connection resume, this
     // should be the last offset the frontend got an ack for.
-    frontendCon.pos = pos
+    frontendCon.pos = pos;
 
     // ok = ses.shrinkBuffer(ack)
     if (!this.shrinkBuffer(ack)) {
+        console.log('close frontend connection: not shrinkBuffer(ack)')
         frontendCon.closeProtocol();
         return;
     }
